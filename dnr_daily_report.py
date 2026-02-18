@@ -1,20 +1,19 @@
 """
 DNR Capital - Daily Intelligence Report
-Generates AI report using Anthropic API and sends to Telegram (FREE, instant)
+Uses Google Gemini API (FREE) + Telegram Bot
 """
 
-import anthropic
 import urllib.request
 import json
 import datetime
 import os
 
 # ─────────────────────────────────────────
-# CONFIG — set these as GitHub Secrets
+# CONFIG — GitHub Secrets
 # ─────────────────────────────────────────
-ANTHROPIC_API_KEY  = os.environ["ANTHROPIC_API_KEY"]
-TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]  # from BotFather
-TELEGRAM_CHAT_ID   = os.environ["TELEGRAM_CHAT_ID"]    # your personal chat ID
+GEMINI_API_KEY     = os.environ["GEMINI_API_KEY"]
+TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+TELEGRAM_CHAT_ID   = os.environ["TELEGRAM_CHAT_ID"]
 
 # ─────────────────────────────────────────
 # TOPIC & CASE STUDY ROTATION
@@ -70,9 +69,10 @@ def get_today_company(): return get_rotation(COMPANIES)
 def format_date():       return datetime.date.today().strftime("%A, %d %B %Y")
 
 # ─────────────────────────────────────────
-# GENERATE REPORT VIA ANTHROPIC
+# GENERATE REPORT VIA GEMINI (FREE)
 # ─────────────────────────────────────────
-SYSTEM_PROMPT = """You are the Chief Intelligence Officer of DNR Capital.
+def generate_report():
+    prompt = f"""You are the Chief Intelligence Officer of DNR Capital.
 Prepare a daily briefing for a 20-year-old CA Intermediate student building DNR Capital
 — a firm offering investment banking, private equity, and financial & compliance services.
 
@@ -81,7 +81,7 @@ Format for Telegram using *bold* for headers (single asterisk). Keep under 1500 
 Use this exact structure:
 
 🏦 *DNR CAPITAL — DAILY BRIEF*
-📅 [date]
+📅 {format_date()}
 
 ━━━━━━━━━━━━━━━━━━━━
 📊 *MARKET PULSE*
@@ -90,37 +90,37 @@ Use this exact structure:
 • [one sector or deal news]
 
 ━━━━━━━━━━━━━━━━━━━━
-🧠 *CONCEPT: [topic title]*
+🧠 *CONCEPT: {get_today_topic()}*
 [3-4 sentences: what it is, how it works, why it matters for IB/PE]
 
 ━━━━━━━━━━━━━━━━━━━━
-🏢 *CASE STUDY: [company]*
+🏢 *CASE STUDY: {get_today_company()}*
 [2-3 sentences: what they did right + 1 lesson for DNR Capital]
 
 ━━━━━━━━━━━━━━━━━━━━
 💡 *FOUNDER'S NOTE*
 [1 sharp, motivational line for the journey ahead]
 
-— DNR Capital Intelligence"""
+— DNR Capital Intelligence
 
-def generate_report():
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    message = client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=700,
-        system=SYSTEM_PROMPT,
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Today is {format_date()}.\n"
-                f"Today's concept to teach: {get_today_topic()}\n"
-                f"Today's case study company: {get_today_company()}\n\n"
-                "Generate the daily briefing. Use real knowledge about Indian financial "
-                "markets and the company. Be concise, educational, and sharp."
-            )
-        }]
+Generate this briefing now. Be concise, educational, and sharp."""
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+
+    payload = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"maxOutputTokens": 700, "temperature": 0.7}
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        url, data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST"
     )
-    return message.content[0].text
+
+    with urllib.request.urlopen(req, timeout=30) as response:
+        result = json.loads(response.read().decode("utf-8"))
+        return result["candidates"][0]["content"]["parts"][0]["text"]
 
 # ─────────────────────────────────────────
 # SEND TO TELEGRAM
